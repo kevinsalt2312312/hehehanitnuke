@@ -40,6 +40,128 @@ DANGEROUS_PERMISSION_NAMES = {
     "mention_everyone",
 }
 
+SERVER_CHANNEL_TEMPLATE = [
+    {
+        "category": "IMPORTANT",
+        "channels": [
+            ("text", "📢┃announcements"),
+            ("text", "📜┃rules"),
+            ("text", "🎫┃support"),
+            ("text", "🚀┃server-boosts"),
+            ("text", "🎉┃giveaways"),
+            ("text", "🔗┃joins"),
+        ],
+    },
+    {
+        "category": "Listings",
+        "channels": [
+            ("text", "👑┃owners-listing"),
+            ("text", "⭐┃co-listing"),
+        ],
+    },
+    {
+        "category": "SERVICES",
+        "channels": [
+            ("text", "🛡┃tos"),
+            ("text", "💎┃mm-request"),
+            ("text", "🛍┃mutation-forges"),
+            ("text", "✅┃mutation-vouches"),
+        ],
+    },
+    {
+        "category": "TEXT CHANNELS",
+        "channels": [
+            ("text", "💬┃social"),
+            ("text", "🛒┃marketplace"),
+            ("text", "🏷┃mm-listings"),
+            ("text", "✅┃vouches"),
+        ],
+    },
+    {
+        "category": "STOCKS",
+        "channels": [
+            ("text", "🌱┃seeds"),
+            ("text", "🌦┃weather"),
+            ("text", "📦┃props"),
+            ("text", "⚙┃gear"),
+        ],
+    },
+    {"category": "INDEX TICKETS", "channels": []},
+    {
+        "category": "READ",
+        "channels": [
+            ("text", "⌁・main-method"),
+            ("text", "⌁・auto-adv"),
+            ("text", "⌁・main-guide"),
+            ("text", "⌁・tutorial-guide"),
+        ],
+    },
+    {
+        "category": "IMPORTANT",
+        "channels": [
+            ("text", "⌁・announcements"),
+            ("text", "⌁・updates"),
+            ("text", "⌁・guide"),
+            ("text", "⌁・rules"),
+            ("text", "⌁・events"),
+        ],
+    },
+    {
+        "category": "STAFF",
+        "channels": [
+            ("text", "⌁・verify"),
+            ("text", "⌁・staff-chat"),
+            ("text", "⌁・cmds"),
+            ("text", "⌁・staff-trading"),
+            ("text", "⌁・staff-giveaways"),
+            ("text", "⌁・suggestions"),
+        ],
+    },
+    {"category": "TRAININGS", "channels": []},
+    {"category": "ROLE TICKETS", "channels": []},
+    {
+        "category": "RECRUITS",
+        "channels": [
+            ("text", "⌁・recruit-guide"),
+            ("text", "⌁・recruit-rewards"),
+            ("text", "⌁・recruit-logs"),
+        ],
+    },
+    {
+        "category": "RATES",
+        "channels": [
+            ("text", "⌁・adopt-me-rates"),
+            ("text", "⌁・mm2-rates"),
+            ("text", "⌁・sab-rates"),
+        ],
+    },
+    {
+        "category": "EXTRA",
+        "channels": [
+            ("text", "⌁・middleman-commands"),
+            ("text", "⌁・personal-mm"),
+            ("text", "⌁・report-users"),
+            ("text", "⌁・moderation-logs"),
+        ],
+    },
+    {
+        "category": "────────────",
+        "channels": [
+            ("voice", "VC1"),
+            ("voice", "VC2"),
+        ],
+    },
+    {
+        "category": "view logs",
+        "channels": [
+            ("text", "⌁・transcripts"),
+            ("text", "⌁・ban-logs"),
+            ("text", "⌁・promotion-demotion-logs"),
+            ("text", "⌁・antinuke-logs"),
+        ],
+    },
+]
+
 
 intents = discord.Intents.default()
 intents.guilds = True
@@ -347,6 +469,8 @@ async def send_log(guild: discord.Guild, entry: dict[str, Any]) -> None:
 
     channel = guild.get_channel(ANTINUKE_LOG_CHANNEL_ID)
     if not isinstance(channel, discord.TextChannel):
+        channel = discord.utils.get(guild.text_channels, name="⌁・antinuke-logs") or discord.utils.get(guild.text_channels, name="antinuke-logs")
+    if not isinstance(channel, discord.TextChannel):
         return
 
     embed = discord.Embed(
@@ -545,6 +669,61 @@ async def restore_channel(guild: discord.Guild, data: dict[str, Any]) -> str:
         return f"Recreated channel as {created.id}"
     except discord.HTTPException as exc:
         return f"Failed: {exc}"
+
+
+async def delete_all_channels(guild: discord.Guild) -> list[str]:
+    results = []
+    channels = sorted(guild.channels, key=lambda channel: isinstance(channel, discord.CategoryChannel))
+    for channel in channels:
+        try:
+            await channel.delete(reason="Anti-Nuke restore: full channel reset")
+            results.append(f"Deleted {channel.name}")
+            await asyncio.sleep(0.35)
+        except discord.HTTPException as exc:
+            results.append(f"Failed deleting {channel.name}: {exc}")
+    return results
+
+
+async def restore_template_channels(guild: discord.Guild) -> list[str]:
+    results = []
+    for category_block in SERVER_CHANNEL_TEMPLATE:
+        try:
+            category = await guild.create_category(
+                category_block["category"],
+                reason="Anti-Nuke restore: recreate template category",
+            )
+            results.append(f"Created category {category.name}")
+            await asyncio.sleep(0.35)
+        except discord.HTTPException as exc:
+            results.append(f"Failed creating category {category_block['category']}: {exc}")
+            continue
+
+        for channel_type, channel_name in category_block["channels"]:
+            try:
+                if channel_type == "voice":
+                    created = await guild.create_voice_channel(
+                        channel_name,
+                        category=category,
+                        reason="Anti-Nuke restore: recreate template voice channel",
+                    )
+                else:
+                    created = await guild.create_text_channel(
+                        channel_name,
+                        category=category,
+                        reason="Anti-Nuke restore: recreate template text channel",
+                    )
+                results.append(f"Created {created.name}")
+                await asyncio.sleep(0.35)
+            except discord.HTTPException as exc:
+                results.append(f"Failed creating {channel_name}: {exc}")
+    return results
+
+
+async def full_channel_template_restore(guild: discord.Guild) -> list[str]:
+    results = ["Starting full channel reset from screenshot template"]
+    results.extend(await delete_all_channels(guild))
+    results.extend(await restore_template_channels(guild))
+    return results
 
 
 def find_backup_item(guild: discord.Guild, section: str, item_id: int) -> Optional[dict[str, Any]]:
@@ -1093,7 +1272,10 @@ async def restore(ctx: commands.Context) -> None:
         await ctx.reply("No backup exists yet.", mention_author=False)
         return
 
-    await ctx.reply("Starting restore from latest backup. This can take a moment.", mention_author=False)
+    await ctx.reply(
+        "Starting full restore. I will delete every channel, recreate the screenshot layout, then restore roles/settings where possible.",
+        mention_author=False,
+    )
     results = []
     results.append(await restore_guild_settings(ctx.guild))
 
@@ -1103,13 +1285,19 @@ async def restore(ctx: commands.Context) -> None:
         results.append(await restore_role(ctx.guild, role_data))
         await asyncio.sleep(0.5)
 
-    for channel_data in sorted(backup.get("channels", []), key=lambda item: item.get("position", 0)):
-        results.append(await restore_channel(ctx.guild, channel_data))
-        await asyncio.sleep(0.5)
+    results.extend(await full_channel_template_restore(ctx.guild))
 
     await make_backup(ctx.guild)
     summary = "\n".join(f"- {result}" for result in results[-15:])
-    await ctx.send(f"Restore finished. Last results:\n{summary[:1800]}")
+    finish_message = f"Restore finished. Last results:\n{summary[:1800]}"
+    log_channel = discord.utils.get(ctx.guild.text_channels, name="⌁・antinuke-logs") or discord.utils.get(ctx.guild.text_channels, name="antinuke-logs")
+    try:
+        if isinstance(log_channel, discord.TextChannel):
+            await log_channel.send(finish_message)
+        else:
+            await ctx.author.send(finish_message)
+    except discord.HTTPException:
+        pass
 
 
 @bot.group(name="config", invoke_without_command=True)
